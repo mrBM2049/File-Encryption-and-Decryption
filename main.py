@@ -2,6 +2,7 @@ import streamlit as st
 from cryptography.fernet import Fernet
 import os
 import io
+import base64
 
 # --- Utility Functions ---
 def generate_key():
@@ -21,6 +22,14 @@ def encrypt_file(file_data, key):
 def decrypt_file(file_data, key):
     fernet = Fernet(key)
     return fernet.decrypt(file_data)
+
+def is_valid_fernet_key(key_str):
+    try:
+        key_bytes = key_str.encode()
+        decoded = base64.urlsafe_b64decode(key_bytes)
+        return len(decoded) == 32
+    except:
+        return False
 
 # --- Streamlit App ---
 st.set_page_config(page_title="File Encryption & Decryption", layout="centered")
@@ -54,20 +63,34 @@ if option == "Encrypt File":
     st.header("Encrypt a File")
     uploaded_file = st.file_uploader("Upload file to encrypt", type=file_types if file_types else None)
 
+    key_type = st.radio("Key Type", ("Auto-generate Key", "Enter Custom Key"))
+
+    custom_key_input = None
+    if key_type == "Enter Custom Key":
+        custom_key_input = st.text_input("Enter your 32-byte Base64-encoded key")
+
     if uploaded_file:
-        key = generate_key()
-        file_data = load_file(uploaded_file)
-        encrypted_data = encrypt_file(file_data, key)
+        if key_type == "Enter Custom Key":
+            if not is_valid_fernet_key(custom_key_input):
+                st.error("Invalid key. Must be a valid Base64-encoded 32-byte string.")
+            else:
+                key = custom_key_input.encode()
+        else:
+            key = generate_key()
 
-        st.success("File encrypted successfully!")
-        st.download_button("⬇ Download Encrypted File", encrypted_data, file_name=f"encrypted_{uploaded_file.name}")
+        if key_type == "Auto-generate Key" or is_valid_fernet_key(custom_key_input):
+            file_data = load_file(uploaded_file)
+            encrypted_data = encrypt_file(file_data, key)
 
-        st.text_input("Encryption Key (Keep it safe for decryption)", value=key.decode(), disabled=True)
+            st.success("File encrypted successfully!")
+            st.download_button("⬇ Download Encrypted File", encrypted_data, file_name=f"encrypted_{uploaded_file.name}")
 
-        key_txt = io.BytesIO()
-        key_txt.write(key)
-        key_txt.seek(0)
-        st.download_button("⬇ Download Key as .txt", key_txt, file_name="encryption_key.txt", mime="text/plain")
+            st.text_input("Encryption Key (Keep it safe for decryption)", value=key.decode(), disabled=True)
+
+            key_txt = io.BytesIO()
+            key_txt.write(key)
+            key_txt.seek(0)
+            st.download_button("⬇ Download Key as .txt", key_txt, file_name="encryption_key.txt", mime="text/plain")
 
 elif option == "Decrypt File":
     st.header("Decrypt a File")
